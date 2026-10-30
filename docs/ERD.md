@@ -13,6 +13,7 @@ erDiagram
     photos ||--o{ correction_photos : "가리켜진다"
     posts ||--o{ post_photos : "붙인다"
     photos ||--o{ post_photos : "붙는다"
+    photos ||--o| photo_notes : "사진별 글"
     posts ||--o{ post_tags : "달린다"
 
     auth_users {
@@ -68,6 +69,14 @@ erDiagram
         date post_date "현지 날짜. 하루에 여러 개 가능"
         varchar title
         text body "10000자 이하"
+        timestamptz updated_at
+    }
+    photo_notes {
+        varchar photo_id PK,FK
+        varchar title
+        text body "10000자 이하"
+        text_array tags
+        jsonb source "출처와 시안 원문"
         timestamptz updated_at
     }
     post_photos {

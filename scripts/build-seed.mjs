@@ -7,6 +7,7 @@ const frontRoot = resolve(process.argv[2] ?? '../danyeo-on');
 const seedDir = join(frontRoot, 'src/data/seed');
 const fixtureDir = join(frontRoot, 'src/data/fixtures');
 const outFile = resolve('supabase/seed.sql');
+const writing = JSON.parse(readFileSync(resolve(import.meta.dirname, '../data/demo-photo-writing.json'), 'utf8'));
 
 // 데모 계정은 uuid 를 고정해 두어야 시드를 다시 넣어도 같은 사람이 된다
 const PERSONAS = [
@@ -106,6 +107,10 @@ values (
     if (photoLinks.length) out.push(`insert into public.post_photos (post_id, photo_id, seq) values\n${values(photoLinks)};`);
     const tags = posts.flatMap((p) => [...new Set(p.tags)].map((t) => [p.id, t]));
     if (tags.length) out.push(`insert into public.post_tags (post_id, tag) values\n${values(tags)};`);
+  }
+  const notes = writing.notes.filter((n) => n.persona === key);
+  if (notes.length) {
+    out.push(`insert into public.photo_notes (photo_id, title, body, tags, source, updated_at) values\n${notes.map((n) => `  (${lit(n.photoId)}, ${lit(n.title)}, ${lit(n.body)}, array[${n.tags.map(lit).join(', ')}]::text[], ${json(n.source)}, ${lit(n.updatedAt)})`).join(',\n')};`);
   }
   out.push(`insert into public.journeys (owner_id, payload)
 values (${lit(uuid)}, ${json(migrateFileKey(journey, uuid, key))});`);
