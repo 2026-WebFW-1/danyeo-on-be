@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 const { SUPABASE_URL: url, SUPABASE_PUBLISHABLE_KEY: key } = process.env;
 const seedDir = join(resolve(process.argv[2] ?? '../danyeo-on'), 'src/data/seed');
 const PASSWORD = 'demo1234';
+const writing = JSON.parse(readFileSync(resolve(import.meta.dirname, '../data/demo-photo-writing.json'), 'utf8'));
 
 async function call(path, { token, method = 'GET', body } = {}) {
   const res = await fetch(`${url}${path}`, {
@@ -87,6 +88,14 @@ for (const persona of ['seojin', 'edge', 'empty']) {
     compare(actual[k], expected[k], k);
   }
   ok(`my_data 가 seed 와 같아요 (사진 ${data.photos.length}, 보정 ${data.corrections.length}, 글 ${data.posts.length})`);
+  const notes = await call('/rest/v1/photo_notes?select=*', { token });
+  assert.equal(notes.status, 200);
+  const expectedNotes = writing.notes.filter((n) => n.persona === persona).map((n) => ({
+    photo_id: n.photoId, title: n.title, body: n.body, tags: n.tags, source: n.source, updated_at: n.updatedAt,
+  }));
+  const byPhoto = (a, b) => a.photo_id.localeCompare(b.photo_id);
+  compare(notes.data.sort(byPhoto), expectedNotes.sort(byPhoto), 'photo_notes');
+  ok(`사진별 글 ${notes.data.length}개가 원문/사진 연결 계획과 같아요`);
 }
 
 console.log('권한');
@@ -96,6 +105,20 @@ const others = await call(`/rest/v1/photos?select=id&owner_id=eq.${edge.uid}`, {
 assert.equal(others.status, 200);
 assert.equal(others.data.length, 0);
 ok('seojin 으로 edge 사진을 조회하면 0장이에요');
+const edgePhoto = writing.notes.find((n) => n.persona === 'edge').photoId;
+const foreignNotes = await call(`/rest/v1/photo_notes?photo_id=eq.${edgePhoto}`, { token: seojin.token });
+assert.equal(foreignNotes.status, 200);
+assert.deepEqual(foreignNotes.data, []);
+const deniedInsert = await call('/rest/v1/photo_notes', { token: seojin.token, method: 'POST',
+  body: { photo_id: edgePhoto, title: '권한 검사', body: '저장되면 안 됩니다.' } });
+assert.equal(deniedInsert.status, 403);
+const deniedUpdate = await call(`/rest/v1/photo_notes?photo_id=eq.${edgePhoto}`, { token: seojin.token, method: 'PATCH', body: { title: '권한 검사' } });
+assert.ok([200, 204].includes(deniedUpdate.status));
+const edgeNote = await call(`/rest/v1/photo_notes?photo_id=eq.${edgePhoto}`, { token: edge.token });
+assert.equal(edgeNote.data[0].title, writing.notes.find((n) => n.photoId === edgePhoto).title);
+const anonNotes = await call('/rest/v1/photo_notes?select=photo_id');
+assert.ok([401, 403].includes(anonNotes.status));
+ok('사진별 글은 다른 계정 조회/추가/수정과 익명 조회가 막혀요');
 
 const anon = await call('/rest/v1/rpc/my_data', { method: 'POST', body: {} });
 assert.notEqual(anon.status, 200);
