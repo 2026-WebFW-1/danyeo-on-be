@@ -4,6 +4,7 @@
 
 - 대시보드: https://supabase.com/dashboard/project/decjgajlzbqwolhkfkym (조직 `danyeo-on`, 서울 리전)
 - 테이블 관계와 설계 이유: [ERD](docs/ERD.md)
+- 데모 사진의 빈 이미지 연결 보완: [수집·적용·검증 절차](docs/DEMO_PHOTO_COVERAGE.md)
 - 주소·키·DB 비밀번호는 `.env.local`에 둡니다. git에 올리지 않습니다. 프론트엔드에는 주소와 publishable 키만 있으면 되고, DB 비밀번호는 마이그레이션을 올리는 사람만 필요합니다.
 
 ## 프론트엔드가 부르는 함수
