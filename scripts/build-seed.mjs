@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 
 const frontRoot = resolve(process.argv[2] ?? '../danyeo-on');
 const seedDir = join(frontRoot, 'src/data/seed');
+const fixtureDir = join(frontRoot, 'src/data/fixtures');
 const outFile = resolve('supabase/seed.sql');
 
 // 데모 계정은 uuid 를 고정해 두어야 시드를 다시 넣어도 같은 사람이 된다
@@ -24,6 +25,20 @@ const lit = (v) => {
 const json = (v) => `${lit(JSON.stringify(v))}::jsonb`;
 const values = (rows) => rows.map((r) => `  (${r.map(lit).join(', ')})`).join(',\n');
 
+const migrateFileKey = (value, uuid, persona) => {
+  if (Array.isArray(value)) return value.map((item) => migrateFileKey(item, uuid, persona));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([name, item]) => [name, migrateFileKey(item, uuid, persona)]),
+    );
+  }
+  if (typeof value === 'string' && value.startsWith('public:/photos/')) {
+    const fileName = value.slice(value.lastIndexOf('/') + 1);
+    return `demo:${uuid}/${persona}/${fileName}`;
+  }
+  return value;
+};
+
 const out = [
   '-- scripts/build-seed.mjs 가 만든 파일이다. 손으로 고치지 말고 스크립트를 다시 돌린다.',
   `-- 데모 계정 비밀번호는 전부 ${DEMO_PASSWORD}`,
@@ -32,7 +47,9 @@ const out = [
 
 for (const { key, uuid } of PERSONAS) {
   const seed = JSON.parse(readFileSync(join(seedDir, `${key}.json`), 'utf8'));
+  const fixture = JSON.parse(readFileSync(join(fixtureDir, `${key}.journey.json`), 'utf8'));
   const { user, photos, corrections, posts } = seed;
+  const { personaId: _personaId, generatedBy: _generatedBy, about: _about, ...journey } = fixture;
   out.push(`-- ${key}: 사진 ${photos.length}장, 보정 ${corrections.length}개, 글 ${posts.length}개`);
 
   // 프로필은 auth.users 트리거가 만든다
@@ -65,7 +82,7 @@ values (
       p.camera ? `(select id from public.cameras where make = ${lit(p.camera.make)} and model = ${lit(p.camera.model)})` : 'null',
       lit(p.fileName), lit(p.takenAt), lit(p.offset), lit(p.lat), lit(p.lng),
       lit(p.camera?.focal), lit(p.camera?.aperture), lit(p.camera?.shutter), lit(p.camera?.iso),
-      lit(p.fileKey), lit(p.uploadedAt),
+      lit(migrateFileKey(p.fileKey, uuid, key)), lit(p.uploadedAt),
     ].join(', ')})`);
     out.push(`insert into public.photos (id, owner_id, camera_id, file_name, taken_at, utc_offset, lat, lng, focal, aperture, shutter, iso, file_key, uploaded_at) values\n${rows.join(',\n')};`);
   }
@@ -90,6 +107,8 @@ values (
     const tags = posts.flatMap((p) => [...new Set(p.tags)].map((t) => [p.id, t]));
     if (tags.length) out.push(`insert into public.post_tags (post_id, tag) values\n${values(tags)};`);
   }
+  out.push(`insert into public.journeys (owner_id, payload)
+values (${lit(uuid)}, ${json(migrateFileKey(journey, uuid, key))});`);
   out.push('');
 }
 

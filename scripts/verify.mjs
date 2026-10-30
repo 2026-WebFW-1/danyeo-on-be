@@ -36,9 +36,20 @@ async function signIn(email) {
 
 // 시각은 표기가 달라도 같은 순간이면 같다고 본다. ownerId 는 seed 의 u_xxx 대신 uuid 다
 const sameInstant = (a, b) => a === b || new Date(a).getTime() === new Date(b).getTime();
-function normalize(seed, uid) {
+function migrateFileKey(fileKey, uid, persona) {
+  if (!fileKey?.startsWith('public:/photos/')) return fileKey;
+  const fileName = fileKey.slice(fileKey.lastIndexOf('/') + 1);
+  return `demo:${uid}/${persona}/${fileName}`;
+}
+function normalize(seed, uid, persona) {
   const byId = (a, b) => a.id.localeCompare(b.id);
-  const photos = seed.photos.map(({ ...p }) => ({ ...p, ownerId: uid })).sort(byId);
+  const photos = seed.photos
+    .map(({ ...p }) => ({
+      ...p,
+      ownerId: uid,
+      fileKey: migrateFileKey(p.fileKey, uid, persona),
+    }))
+    .sort(byId);
   const corrections = seed.corrections.map((c) => ({ ...c, ownerId: uid })).sort(byId);
   const posts = seed.posts.map((p) => ({ ...p, ownerId: uid, tags: [...p.tags].sort() })).sort(byId);
   return { photos, corrections, posts };
@@ -69,8 +80,8 @@ for (const persona of ['seojin', 'edge', 'empty']) {
     { id: uid, email: seed.user.email, name: seed.user.name, provider: 'demo' },
     'user',
   );
-  const actual = normalize(data, uid);
-  const expected = normalize(seed, uid);
+  const actual = normalize(data, uid, persona);
+  const expected = normalize(seed, uid, persona);
   for (const k of ['photos', 'corrections', 'posts']) {
     assert.equal(actual[k].length, expected[k].length, `${k} 개수`);
     compare(actual[k], expected[k], k);
