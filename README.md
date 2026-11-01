@@ -19,7 +19,7 @@
   | `add_correction(correction)`| 보정 하나 저장                                            |
   | `save_post(post)`           | 글 저장. 같은 ID면 태그·사진까지 통째로 바꿈              |
 
-- **개인 사진 파일은 비공개 버킷 `photos`.** 경로는 `<uuid>/full/<사진 ID>.webp`, `<uuid>/thumb/<사진 ID>.webp`이고 `fileKey`는 `upload:<uuid>/<사진 ID>`입니다. 이미지를 올리기 전, 사진을 저장할 때 정합니다. 본인 폴더만 읽고 쓸 수 있어 화면에는 서명 URL로 띄웁니다.
+- **개인 사진 파일은 비공개 버킷 `photos`.** 경로는 `<uuid>/full/<사진 ID>.webp`, `<uuid>/thumb/<사진 ID>.webp`이고 `fileKey`는 `photos:<uuid>/<사진 ID>`입니다. 이미지를 올리기 전, 사진을 저장할 때 정합니다. 본인 폴더만 읽고 쓸 수 있어 화면에는 서명 URL로 띄웁니다.
 - **공개 데모 사진은 public 버킷 `demo-assets`.** 경로는 `<uuid>/<인물>/{full,thumb}/<파일명>.webp`이고 `fileKey`는 `demo:<uuid>/<인물>/<파일명>`입니다. 출처 파일도 `seojin/credits.json`으로 함께 둡니다. 쓰기는 데모 계정 자신의 UUID 폴더만 허용합니다.
 - **계산 완료 Journey는 `journeys`.** RLS로 로그인한 사용자의 한 행만 읽고 쓸 수 있습니다. 현재는 fixture 결과를 시드하고, 이후 계산 로직이 붙어도 화면이 받는 payload 모양은 유지합니다.
 
