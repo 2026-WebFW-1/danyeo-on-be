@@ -151,17 +151,27 @@ const add = await call('/rest/v1/rpc/add_correction', {
   body: { correction: { id: 'c_verify_1', type: 'merge', photoIds: ['p_verify1', 'p_verify0'] } },
 });
 assert.equal(add.status, 204, JSON.stringify(add.data));
+// 집 지정(home)은 사진 한 장을 photoIds 로 가리킨다
+const home = await call('/rest/v1/rpc/add_correction', {
+  token: empty.token,
+  method: 'POST',
+  body: { correction: { id: 'c_verify_2', type: 'home', photoIds: ['p_verify0'] } },
+});
+assert.equal(home.status, 204, JSON.stringify(home.data));
 const post = { id: 'post_verify_1', date: '2024-03-04', title: '확인용', body: '본문', tags: ['b', 'a'], photoIds: ['p_verify0'] };
 assert.equal((await call('/rest/v1/rpc/save_post', { token: empty.token, method: 'POST', body: { post } })).status, 204);
 assert.equal((await call('/rest/v1/rpc/save_post', { token: empty.token, method: 'POST', body: { post: { ...post, title: '고친 제목', photoIds: ['p_verify1', 'p_verify0'] } } })).status, 204);
 const after = (await call('/rest/v1/rpc/my_data', { token: empty.token, method: 'POST', body: {} })).data;
 assert.deepEqual(after.corrections[0].photoIds, ['p_verify1', 'p_verify0']);
+const savedHome = after.corrections.find((c) => c.id === 'c_verify_2');
+assert.equal(savedHome.type, 'home');
+assert.deepEqual(savedHome.photoIds, ['p_verify0']);
 assert.equal(after.posts[0].title, '고친 제목');
 assert.deepEqual(after.posts[0].tags, ['a', 'b']);
 assert.deepEqual(after.posts[0].photoIds, ['p_verify1', 'p_verify0']);
 ok('add_correction·save_post 결과가 my_data 에 seed 모양으로 나와요');
 
-for (const [table, col, val] of [['posts', 'id', 'post_verify_1'], ['corrections', 'id', 'c_verify_1'], ['photos', 'id', 'in.(p_verify0,p_verify1)']]) {
+for (const [table, col, val] of [['posts', 'id', 'post_verify_1'], ['corrections', 'id', 'in.(c_verify_1,c_verify_2)'], ['photos', 'id', 'in.(p_verify0,p_verify1)']]) {
   const filter = val.startsWith('in.') ? val : `eq.${val}`;
   assert.equal((await call(`/rest/v1/${table}?${col}=${filter}`, { token: empty.token, method: 'DELETE' })).status, 204);
 }

@@ -52,7 +52,7 @@ erDiagram
     corrections {
         varchar id PK
         uuid owner_id FK
-        varchar type "rename | exclude | transit | mode | split | merge"
+        varchar type "rename | exclude | transit | mode | split | merge | home"
         varchar name "rename 일 때만"
         varchar mode "mode 일 때만"
         timestamptz created_at
@@ -101,7 +101,7 @@ erDiagram
 - **카메라는 `cameras`로 분리한다.** 모델이 제조사를 결정합니다(`iPhone 13 → Apple`, BCNF). 초점 거리·조리개·셔터·ISO는 사진마다 다른 촬영 설정이라 `photos`에 둡니다.
 - **다대다는 중간 엔티티(`correction_photos`·`post_photos`)로 푼다.** `id`를 PK로 두고, 원래 키 `(부모, photo_id)`와 순서 `(부모, seq)`는 UK로 겁니다. 태그는 다른 엔티티를 잇지 않는 값이라 `post_tags`의 `(post_id, tag)`가 PK입니다.
 - **같은 사진은 `(owner_id, file_name, taken_at)`으로 판단한다.** 같은 사진을 다시 올리면 건너뜁니다. 촬영 시각이 없는 사진끼리도 같은 것으로 보도록 `nulls not distinct`를 씁니다.
-- **`corrections`는 한 테이블에 둔다.** `name`·`mode`는 종류에 따라 비지만 종속 관계 문제는 아닙니다. 종류별 테이블로 나누면 정규화 이득 없이 테이블만 6개가 됩니다. 종류와 칸이 어긋나지 않게 check 제약을 겁니다.
+- **`corrections`는 한 테이블에 둔다.** `name`·`mode`는 종류에 따라 비지만 종속 관계 문제는 아닙니다. 종류별 테이블로 나누면 정규화 이득 없이 테이블만 7개가 됩니다. 종류와 칸이 어긋나지 않게 check 제약을 겁니다.
 - **`type`·`mode` 값은 소문자.** 프론트엔드가 테이블에 바로 붙으므로 seed JSON 값을 그대로 씁니다.
 - **예약어를 피했다.** `offset` → `utc_offset`, `date` → `post_date`.
 - **권한은 RLS로만 건다.** 모든 테이블이 본인 행만 읽고 쓰고, 중간 엔티티는 부모와 사진이 둘 다 본인 것일 때만 잇습니다. `cameras`만 모두가 읽고 추가합니다.
