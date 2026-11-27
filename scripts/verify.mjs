@@ -150,14 +150,17 @@ const add = await call('/rest/v1/rpc/add_correction', {
   method: 'POST',
   body: { correction: { id: 'c_verify_1', type: 'merge', photoIds: ['p_verify1', 'p_verify0'] } },
 });
-assert.equal(add.status, 204, JSON.stringify(add.data));
+// 저장된 보정의 ID 를 돌려준다. 보통은 보낸 ID 그대로다
+assert.equal(add.status, 200, JSON.stringify(add.data));
+assert.equal(add.data, 'c_verify_1');
 // 집 지정(home)은 사진 한 장을 photoIds 로 가리킨다
 const home = await call('/rest/v1/rpc/add_correction', {
   token: empty.token,
   method: 'POST',
   body: { correction: { id: 'c_verify_2', type: 'home', photoIds: ['p_verify0'] } },
 });
-assert.equal(home.status, 204, JSON.stringify(home.data));
+assert.equal(home.status, 200, JSON.stringify(home.data));
+assert.equal(home.data, 'c_verify_2');
 const post = { id: 'post_verify_1', date: '2024-03-04', title: '확인용', body: '본문', tags: ['b', 'a'], photoIds: ['p_verify0'] };
 assert.equal((await call('/rest/v1/rpc/save_post', { token: empty.token, method: 'POST', body: { post } })).status, 204);
 assert.equal((await call('/rest/v1/rpc/save_post', { token: empty.token, method: 'POST', body: { post: { ...post, title: '고친 제목', photoIds: ['p_verify1', 'p_verify0'] } } })).status, 204);
@@ -171,7 +174,31 @@ assert.deepEqual(after.posts[0].tags, ['a', 'b']);
 assert.deepEqual(after.posts[0].photoIds, ['p_verify1', 'p_verify0']);
 ok('add_correction·save_post 결과가 my_data 에 seed 모양으로 나와요');
 
-for (const [table, col, val] of [['posts', 'id', 'post_verify_1'], ['corrections', 'id', 'in.(c_verify_1,c_verify_2)'], ['photos', 'id', 'in.(p_verify0,p_verify1)']]) {
+// 같은 사진의 exclude 는 하나만 저장되고, 뒤 요청은 있던 보정의 ID 를 받는다
+const exclude = (id, photoId) => call('/rest/v1/rpc/add_correction', {
+  token: empty.token,
+  method: 'POST',
+  body: { correction: { id, type: 'exclude', photoId } },
+});
+const first = await exclude('c_verify_3', 'p_verify0');
+const second = await exclude('c_verify_4', 'p_verify0');
+assert.equal(first.status, 200, JSON.stringify(first.data));
+assert.equal(second.status, 200, JSON.stringify(second.data));
+assert.deepEqual([first.data, second.data], ['c_verify_3', 'c_verify_3']);
+// 두 탭이 같은 사진을 동시에 빼는 경우
+const together = await Promise.all([exclude('c_verify_5', 'p_verify1'), exclude('c_verify_6', 'p_verify1')]);
+for (const r of together) assert.equal(r.status, 200, JSON.stringify(r.data));
+assert.equal(together[0].data, together[1].data);
+assert.ok(['c_verify_5', 'c_verify_6'].includes(together[0].data));
+const excludes = (await call('/rest/v1/rpc/my_data', { token: empty.token, method: 'POST', body: {} })).data
+  .corrections.filter((c) => c.type === 'exclude');
+assert.deepEqual(
+  excludes.map((c) => [c.id, c.photoId]).sort(),
+  [['c_verify_3', 'p_verify0'], [together[0].data, 'p_verify1']].sort(),
+);
+ok('같은 사진을 두 번 빼도(차례로·동시에) exclude 는 하나예요');
+
+for (const [table, col, val] of [['posts', 'id', 'post_verify_1'], ['corrections', 'id', 'in.(c_verify_1,c_verify_2,c_verify_3,c_verify_4,c_verify_5,c_verify_6)'], ['photos', 'id', 'in.(p_verify0,p_verify1)']]) {
   const filter = val.startsWith('in.') ? val : `eq.${val}`;
   assert.equal((await call(`/rest/v1/${table}?${col}=${filter}`, { token: empty.token, method: 'DELETE' })).status, 204);
 }
