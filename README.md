@@ -16,7 +16,7 @@
   | --------------------------- | --------------------------------------------------------- |
   | `my_data()`                 | `{ user, photos, corrections, posts }`를 seed 모양으로    |
   | `save_photos(photos)`       | 여러 장 저장. 이미 있는 사진은 건너뛰고 새로 저장한 ID만 |
-  | `add_correction(correction)`| 보정 하나 저장                                            |
+  | `add_correction(correction)`| 보정 하나 저장. 이미 뺀 사진의 `exclude`면 넣지 않고 있던 보정의 ID를 돌려줌 |
   | `save_post(post)`           | 글 저장. 같은 ID면 태그·사진까지 통째로 바꿈              |
 
 - **개인 사진 파일은 비공개 버킷 `photos`.** 경로는 `<uuid>/full/<사진 ID>.webp`, `<uuid>/thumb/<사진 ID>.webp`이고 `fileKey`는 `photos:<uuid>/<사진 ID>`입니다. 이미지를 올리기 전, 사진을 저장할 때 정합니다. 본인 폴더만 읽고 쓸 수 있어 화면에는 서명 URL로 띄웁니다.
