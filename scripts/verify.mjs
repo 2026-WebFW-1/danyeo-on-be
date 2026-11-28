@@ -2,6 +2,7 @@
 //  1. my_data() 가 프론트엔드 seed JSON 과 같은지
 //  2. 남의 데이터가 안 보이는지, 로그인 없이 막히는지
 //  3. 쓰기 함수(save_photos·add_correction·save_post)가 되는지 — empty 계정에 쓰고 지운다
+//  4. delete_my_data 가 한 번에 지우고, 지우기 전 판 번호로 저장하는 Journey 를 거절하는지(#12) — empty 계정
 // 사용: node --env-file=.env.local scripts/verify.mjs [프론트엔드 저장소 경로]
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -12,13 +13,14 @@ const seedDir = join(resolve(process.argv[2] ?? '../danyeo-on'), 'src/data/seed'
 const PASSWORD = 'demo1234';
 const writing = JSON.parse(readFileSync(resolve(import.meta.dirname, '../data/demo-photo-writing.json'), 'utf8'));
 
-async function call(path, { token, method = 'GET', body } = {}) {
+async function call(path, { token, method = 'GET', body, headers } = {}) {
   const res = await fetch(`${url}${path}`, {
     method,
     headers: {
       apikey: key,
       'Content-Type': 'application/json',
       ...(token && { Authorization: `Bearer ${token}` }),
+      ...headers,
     },
     body: body && JSON.stringify(body),
   });
@@ -198,12 +200,56 @@ assert.deepEqual(
 );
 ok('같은 사진을 두 번 빼도(차례로·동시에) exclude 는 하나예요');
 
-for (const [table, col, val] of [['posts', 'id', 'post_verify_1'], ['corrections', 'id', 'in.(c_verify_1,c_verify_2,c_verify_3,c_verify_4,c_verify_5,c_verify_6)'], ['photos', 'id', 'in.(p_verify0,p_verify1)']]) {
-  const filter = val.startsWith('in.') ? val : `eq.${val}`;
-  assert.equal((await call(`/rest/v1/${table}?${col}=${filter}`, { token: empty.token, method: 'DELETE' })).status, 204);
-}
+// delete_my_data(#12): 위에서 넣은 사진 · 보정 · 글과 Journey 를 한 번에 지운다
+const epochOf = async () =>
+  (await call('/rest/v1/profiles?select=data_epoch', { token: empty.token })).data[0].data_epoch;
+const saveJourney = (dataEpoch) => call('/rest/v1/journeys', {
+  token: empty.token,
+  method: 'POST',
+  headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+  body: { owner_id: empty.uid, payload: { stops: [] }, data_epoch: dataEpoch },
+});
+const journeysLeft = async () => (await call('/rest/v1/journeys?select=owner_id', { token: empty.token })).data;
+
+const before = await epochOf();
+const savedBefore = await saveJourney(before);
+assert.equal(savedBefore.status, 201, JSON.stringify(savedBefore.data));
+ok(`지금 판 번호(${before})로 Journey 를 저장할 수 있어요`);
+
+const deleted = await call('/rest/v1/rpc/delete_my_data', { token: empty.token, method: 'POST', body: {} });
+assert.equal(deleted.status, 200, JSON.stringify(deleted.data));
+assert.equal(deleted.data, before + 1);
+assert.equal(await epochOf(), before + 1);
 const cleared = (await call('/rest/v1/rpc/my_data', { token: empty.token, method: 'POST', body: {} })).data;
 assert.equal(cleared.photos.length + cleared.corrections.length + cleared.posts.length, 0);
+assert.deepEqual(await journeysLeft(), []);
+ok('delete_my_data 로 사진 · 보정 · 글 · Journey 가 모두 지워지고 판 번호가 1 올라요');
+
+const stale = await saveJourney(before);
+assert.notEqual(stale.status, 201);
+assert.equal(stale.data?.message, 'stale_journey', JSON.stringify(stale.data));
+assert.deepEqual(await journeysLeft(), []);
+ok(`지우기 전 판 번호로 저장하면 거절돼요 (${stale.status})`);
+
+assert.equal((await saveJourney(before + 1)).status, 201);
+assert.equal((await saveJourney(null)).status, 201);
+ok('새 판 번호나 판 번호 없이(지금 배포된 프론트엔드)는 저장돼요');
+
+const forbidden = await call(`/rest/v1/profiles?id=eq.${empty.uid}`, {
+  token: empty.token,
+  method: 'PATCH',
+  body: { data_epoch: 0 },
+});
+assert.notEqual(forbidden.status, 204);
+assert.equal(await epochOf(), before + 1);
+ok(`판 번호는 사용자가 직접 바꿀 수 없어요 (${forbidden.status})`);
+
+const anonDelete = await call('/rest/v1/rpc/delete_my_data', { method: 'POST', body: {} });
+assert.notEqual(anonDelete.status, 200);
+ok(`로그인 없이 delete_my_data 는 ${anonDelete.status}`);
+
+assert.equal((await call('/rest/v1/rpc/delete_my_data', { token: empty.token, method: 'POST', body: {} })).status, 200);
+assert.deepEqual(await journeysLeft(), []);
 ok('지우고 나면 empty 계정이 다시 비어요');
 
 console.log(`\n${passed}개 통과`);
