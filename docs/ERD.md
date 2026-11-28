@@ -26,6 +26,7 @@ erDiagram
         varchar name
         varchar picture "NULL"
         varchar provider "local | demo"
+        bigint data_epoch "delete_my_data 마다 +1"
         timestamptz created_at
     }
     cameras {
@@ -104,4 +105,6 @@ erDiagram
 - **`corrections`는 한 테이블에 둔다.** `name`·`mode`는 종류에 따라 비지만 종속 관계 문제는 아닙니다. 종류별 테이블로 나누면 정규화 이득 없이 테이블만 7개가 됩니다. 종류와 칸이 어긋나지 않게 check 제약을 겁니다.
 - **`type`·`mode` 값은 소문자.** 프론트엔드가 테이블에 바로 붙으므로 seed JSON 값을 그대로 씁니다.
 - **예약어를 피했다.** `offset` → `utc_offset`, `date` → `post_date`.
+- **모두 지우기는 함수 하나(`delete_my_data()`)로 한다.** 프론트엔드가 테이블을 차례로 지우면 일부만 지워진 채 남을 수 있어서 한 트랜잭션에서 지웁니다. photos 버킷의 이미지는 트랜잭션 밖이라 프론트엔드가 이어서 지웁니다.
+- **옛 Journey 저장은 판 번호로 거절한다.** Journey는 프론트엔드가 사진을 읽고 20초쯤 계산한 뒤 `journeys`에 저장해서, 지우기 전에 읽은 계산(다른 탭 · 기기 포함)이 지운 뒤에 저장하면 사진 없는 여행이 되살아납니다. `delete_my_data()`가 `profiles.data_epoch`를 올리고, 트리거가 저장하는 `journeys.data_epoch`가 지금 값과 다르면 거절합니다. 트리거는 `profiles` 행을 `for share`로 읽어 지우는 중인 트랜잭션이 끝날 때까지 기다립니다. `data_epoch`를 보내지 않는 저장은 받습니다(판 번호를 모르는 프론트엔드를 깨지 않으려고). `data_epoch`는 사용자에게 수정 권한이 없어서 함수와 트리거는 `security definer`이고, 모든 문장을 `auth.uid()`로 거릅니다.
 - **권한은 RLS로만 건다.** 모든 테이블이 본인 행만 읽고 쓰고, 중간 엔티티는 부모와 사진이 둘 다 본인 것일 때만 잇습니다. `cameras`만 모두가 읽고 추가합니다.
